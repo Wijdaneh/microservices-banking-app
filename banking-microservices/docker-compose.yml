@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: beneficiaire_db,virement_db,chatbot_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-scripts:/docker-entrypoint-initdb.d
+
+  discovery-service:
+    build: ./discovery-service
+    ports:
+      - "8761:8761"
+    environment:
+      EUREKA_SERVER: http://discovery-service:8761/eureka
+    depends_on:
+      - postgres
+
+  config-service:
+    build: ./config-service
+    ports:
+      - "8888:8888"
+    depends_on:
+      - discovery-service
+
+  gateway-service:
+    build: ./gateway-service
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_SERVER: http://config-service:8888
+      EUREKA_SERVER: http://discovery-service:8761/eureka
+    depends_on:
+      - config-service
+      - discovery-service
+
+  beneficiaire-service:
+    build: ./beneficiaire-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      DB_NAME: beneficiaire_db
+    depends_on:
+      - gateway-service
+      - postgres
+
+volumes:
+  postgres_data:
